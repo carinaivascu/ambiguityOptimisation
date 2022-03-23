@@ -1,1 +1,7 @@
-The code will be published upon fully acceptance.
+The code presented in this project generates the figures from the paper "Optimising Diversity in Classifier Ensembles". 
+See:
+https://link.springer.com/epdf/10.1007/s42979-022-01063-7?sharing_token=a7EJqC2mbdmMXC9Ei3AoSve4RwlQNchNByi7wbcMAY4RjxfJwpYT9d1e1JCSjvaiVUHNnDF-BXIht_ugxxEhobCm7G-KA_Q8LTkoJ34L_M8uwV51tB1ht9aFvElFiEaFYKVrRDNgHcrxEhlFa0vUGqsPabCbbr1VUbo-MNkUeqk%3D
+
+The contour_plots.py program generates the contour plots from Figure 2.
+
+More code will be added soon.
