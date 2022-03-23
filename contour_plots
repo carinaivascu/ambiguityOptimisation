@@ -1,0 +1,225 @@
+
+"""
+Generates contour plots of the test CE versus number of  classifiers and rates. 
+A similar contour plot of the training amb_CE is generated.
+"""
+
+
+import numpy as np
+import os
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+import matplotlib.cm as cm
+
+from sklearn.metrics import log_loss
+
+from utils import div_ens, getEnsPredProba,read_gender,read_Star,readGerman,readLiverDataset,readWisconsinCancerDataset,readDatabase,getXandYPerDataset
+
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import BaggingClassifier
+from sklearn.tree import DecisionTreeClassifier
+import random
+
+def get_cmap(n, name='hsv'):
+    '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
+    RGB color; the keyword argument name must be a standard mpl colormap name.'''
+    return plt.cm.get_cmap(name, n+1)
+
+
+def getCE(ens_pred_proba,y_n):
+    '''
+    calulates the cros entropy of the ensemble
+    ens_pred-the array of ensemble predictions for all the patterns
+    y_n-array of targets
+    '''
+    
+    err=log_loss(y_n,ens_pred_proba)
+        
+    return err
+
+
+
+def getMatrPred(bagger,nr_clf,nr_total_trees,Xtr,Xtest):
+#def getMatrPred(bagger,nr_clf,Xtr,Xtest):
+    '''
+    returns the matrix of predictions for all the classifiers contained in the
+    bagger object
+    
+    bagger-the bagger object
+    nr-clf-the number of classifiers
+    Xtr- the training data
+    Xtest-the test data
+    '''
+    
+    indices_to_sel=list(range(nr_total_trees))
+    matr_pred=[]
+    matr_pred_tst=[]
+ 
+    for i in range(nr_clf):
+        
+        index=random.choice(indices_to_sel)
+        indices_to_sel.remove(index)
+        tree=bagger.estimators_[index]
+#
+        pred=tree.predict_proba(Xtr)[:, 1].ravel()
+        matr_pred.append(pred)
+        
+        pred_tst=tree.predict_proba(Xtest)[:, 1].ravel()
+        matr_pred_tst.append(pred_tst)
+    
+    return matr_pred,matr_pred_tst
+
+def getErrAndAmb(matr_pred,matr_pred_tst,ytr,ytst):
+    
+    '''
+    returns the training/test error and ambiguity
+    matr_pred-the matrix of predictions of all classifiers on the training data
+    matr_pred_tst-the matrix of predictions of all classifiers on the test data
+    ytr-training targets
+    ytst-test targets
+    '''
+    
+    nr_clf=len(matr_pred)
+    c=np.ones(nr_clf)*1/nr_clf
+    
+    ens_pred_proba=getEnsPredProba(matr_pred)
+    err_tr=getCE(ens_pred_proba,ytr)
+    amb_tr=div_ens(ytr,matr_pred,c)
+    
+    #test
+    ens_pred_proba_tst=getEnsPredProba(matr_pred_tst)
+    err_tst=getCE(ens_pred_proba_tst,ytst)
+    amb_tst=div_ens(ytst,matr_pred_tst,c)
+    
+    return err_tr,amb_tr,err_tst,amb_tst
+
+
+
+nr_ests_total=100
+
+Etest = []
+Atrain = []
+
+rates = np.linspace(0.5, 1.0, 20)
+nr_repeats=20
+
+
+cmap = get_cmap(len(rates))
+fname = 'sonar.txt'
+
+directory='contour_plots_journal_random'
+
+if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+X,y=getXandYPerDataset(fname,',')
+
+     
+X=np.asarray(X)
+y=np.asarray(y)
+
+for r in rates:
+  print('-'*20, '%g'% r, '-'*20, flush=True)
+    
+  etest = [[] for i in range(nr_ests_total-1)]
+  atrain = [[] for i in range(nr_ests_total-1)]
+
+
+  for i in list(range(nr_repeats)):
+      
+            rkf = StratifiedKFold(n_splits=2, random_state=None, shuffle=True)
+            rkf.get_n_splits(X,y)
+
+            for train, test in rkf.split(X,y):
+            
+                Xtr = X[train,]
+                ttr = y[train,]
+                Xte = X[test,]
+                tte = y[test,]
+                
+                #get the indeces of the patterns that belong to the positive and negative class
+                # in order to get the exact proportion of the classes, so that it can be applied
+                #in the boostrap sampling
+                
+                indices_02=[]
+                indices_12=[]
+                
+                for z in range(len(ttr)):
+                    if ttr[z]==0:
+                        indices_02.append(z)
+                    else:
+                        indices_12.append(z)
+                
+     
+                bagger = BaggingClassifier(indices_02,indices_12,DecisionTreeClassifier(),
+                                           n_estimators=nr_ests_total,
+                                           max_samples=r, max_features=1.0, bootstrap=False,
+                                           n_jobs=-1)
+                    
+                bagger.fit(Xtr,ttr)
+              
+                for j in range(len(etest)):
+                        #so that we can have ensembles formend of 2->nr_ests_total trees
+                        nr_clf=j+2
+
+                        matr_pred,matr_pred_tst=getMatrPred(bagger,nr_clf,nr_ests_total,Xtr,Xte)
+                      
+                        matr_pred=np.asarray(matr_pred)
+                        matr_pred_tst=np.asarray(matr_pred_tst)
+                        
+                        err_tr,amb_tr,err_tst,amb_tst=getErrAndAmb(matr_pred,matr_pred_tst,ttr,tte)
+                        
+                        etest[j].append(err_tst)
+                        atrain[j].append(amb_tr)
+               
+              
+  Etest.append(etest)
+  Atrain.append(atrain)
+
+  
+Etest = np.asarray(Etest)
+Atrain = np.asarray(Atrain)
+
+Etest_nr_clf=[]
+Atrain_nr_clf=[]
+
+for i in range(len(Etest)):
+
+        Etest_nr_clf.append(list(Etest[i].mean(axis=1)))
+        Atrain_nr_clf.append(list(Atrain[i].mean(axis=1)))
+
+nr_clfs=list(range(nr_ests_total-1))
+#so that the ensemble starts from 2->100
+nr_clfs=[nr_clfs[i]+2 for i in range(len(nr_clfs))]
+
+#plot test error contour plot
+
+fig = plt.figure()
+ax = fig.add_axes([0.1, 0.1, 0.6, 0.75])
+
+con = plt.contourf(nr_clfs,rates,Etest_nr_clf, 30,cmap=cm.jet,extend='both')
+#   
+plt.colorbar()
+ax.set_xlabel('Size of ensemble')
+ax.set_ylabel('Rate')
+
+plt.savefig(directory+'/'+fname[:-4]+'test_ce_contour_plot.pdf', bbox_inches='tight')  
+
+#plot training ambiguity contour plot
+
+fig = plt.figure()
+ax = fig.add_axes([0.1, 0.1, 0.6, 0.75])
+
+con = plt.contourf(nr_clfs,rates,Atrain_nr_clf, 30,cmap=cm.jet,extend='both')
+#   
+plt.colorbar()
+ax.set_xlabel('Size of ensemble')
+ax.set_ylabel('Rate')
+
+plt.savefig(directory+'/'+fname[:-4]+'tr_amb_contour_plot.pdf', bbox_inches='tight')   
+ 
+
