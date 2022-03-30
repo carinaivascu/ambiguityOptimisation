@@ -1,0 +1,420 @@
+
+
+# coding: utf-8
+
+# In[1]:
+import numpy as np
+import os
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+
+from matplotlib.ticker import FormatStrFormatter
+
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import BaggingClassifier
+import random
+from sklearn.tree import DecisionTreeClassifier
+
+from utils import getDivValuesCE,getDivValuesChen,getDivValuesHL,getDivValuesCE5,getDivValuesChen5,getDivValuesHL5
+from utils import read_gender,read_Star,readGerman,readLiverDataset,readWisconsinCancerDataset,readDatabase,getXandYPerDataset
+
+def plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, samples,nr_est,db_name):
+ 
+
+    min_err_arr=[min(err_tst[i]) for i in range(len(err_tst))]
+    min_err=min(min_err_arr)
+    min_err_arg=np.argmin(min_err_arr)
+    
+    move_some_samples_plot=0.003
+
+    rect=[0.2,0.5,4.9,3.5]
+    step=0.02
+    
+    fs=110#100
+    fs_text=65#60
+  
+   
+
+    fig = plt.figure()
+    ax = fig.add_axes(rect)
+    
+    for i in range(len(err_tst)):
+ 
+        plt.plot(err_tst[i],amb_tr[i], alpha=.50,color=colors[i])
+        count=0
+        for x, y in zip(err_tst[i],amb_tr[i]):
+            if samples[count] in [0.01,0.52,0.76,1.0] and not (x==min_err and i==min_err_arg):
+                
+                #in order to fit in the boundaries of the plot
+                if samples[count] in [0.01,1.0]:
+                
+                    plt.text(x-move_some_samples_plot,y, str(samples[count]), color='k', fontsize=fs_text)
+                else:
+                    plt.text(x,y, str(samples[count]), color='k', fontsize=fs_text)
+             #mark the sample which yielded the minimum test error
+            if x==min_err and i==min_err_arg:
+                ax.scatter(x,y,marker='o',color='r')
+                ax.annotate("r="+str(samples[count]), xy=(x, y), xytext=(x+step, y),arrowprops=dict(arrowstyle="->"),color='r',size=fs_text)
+
+            count+=1
+  
+    
+    ax.set_xlabel('Test error',fontsize=fs)
+    ax.set_ylabel('Training ambiguity',fontsize=fs)
+    ax.xaxis.set_tick_params(labelsize=fs_text)
+    ax.yaxis.set_tick_params(labelsize=fs_text)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    
+    if "Chen" in div_type:
+        title_plot='0-1 loss'
+    elif "CE" in div_type:
+        title_plot='Cross entropy'
+    else:
+        title_plot='Hinge loss'
+   
+    plt.title(title_plot, x=0.50, y=0.90,fontsize=fs) 
+        
+    plt.savefig(directory+'/Min_'+db_name+'_'+div_type+'_tr_'+'test_err_'+str(nr_est)+'.pdf', bbox_inches='tight')
+   
+
+
+
+
+def getStratifiedHalfOfData(X,y):
+    skf = StratifiedKFold(n_splits=2, random_state=None, shuffle=True)
+    skf.get_n_splits(X,y)
+
+    for train, test in skf.split(X,y):
+            
+                X_first_half= X[train,]
+                y_first_half = y[train,]
+                X_second_half= X[test,]
+                y_second_half = y[test,]
+    
+    X_first_half=np.asarray(X_first_half)
+    y_first_half=np.asarray(y_first_half)
+    X_second_half=np.asarray(X_second_half)
+    y_second_half=np.asarray(y_second_half)
+    
+        
+    return X_first_half,y_first_half,X_second_half,y_second_half
+    
+
+
+# In[7]:
+
+#from sklearn.model_selection import RepeatedKFold
+
+#for small datasets, meaning all of them except gmm5test, Australian and cancer the data shouldn't be split into 16ths, bcz there
+#would be an error when fitting the bagger ValueError: max_samples must be in (0, n_samples]-meaning that for r<0.1 or r<0.15
+    #the nr of samples would be <1
+
+Etest = []
+Etrain = []
+Atest = []
+Atrain = []
+
+
+Etest_Chen = []
+Etrain_Chen  = []
+Atest_Chen  = []
+Atrain_Chen  = []
+
+Etest_HL = []
+Etrain_HL = []
+Atest_HL = []
+Atrain_HL = []
+
+#5 clf
+
+Etest_5 = []
+Etrain_5 = []
+Atest_5 = []
+Atrain_5 = []
+
+
+Etest_Chen_5 = []
+Etrain_Chen_5  = []
+Atest_Chen_5  = []
+Atrain_Chen_5  = []
+
+Etest_HL_5 = []
+Etrain_HL_5 = []
+Atest_HL_5 = []
+Atrain_HL_5 = []
+
+
+rates =np.linspace(0.01, 1.0,30)
+nr_repeats=50
+nr_est=100
+
+fname = 'sonar.txt'
+db=fname[:-4]
+
+
+directory='random_splits'
+
+if not os.path.exists(directory):
+        os.makedirs(directory)
+        
+
+if fname=='German.txt':
+    Xtr,ytr=readGerman(fname)
+elif fname=='Star.csv':
+    Xtr,ytr=read_Star(fname)
+elif fname=='gender.csv':
+    Xtr,ytr=read_gender(fname)
+else:
+    Xtr,ytr=getXandYPerDataset(fname,',')
+
+     
+Xtr=np.asarray(Xtr)
+ytr=np.asarray(ytr)
+
+
+#
+for r in rates:
+  print('-'*20, '%g'% r, '-'*20, flush=True)
+    
+  etest = []
+  etrain = []
+  atest = []
+  atrain = []
+  
+  etest_Chen = []
+  etrain_Chen = []
+  atest_Chen = []
+  atrain_Chen = []
+  
+  etest_HL = []
+  etrain_HL  = []
+  atest_HL  = []
+  atrain_HL  = []
+  
+  #5clf
+  
+  etest_5 = []
+  etrain_5  = []
+  atest_5  = []
+  atrain_5  = []
+  
+  etest_Chen_5  = []
+  etrain_Chen_5  = []
+  atest_Chen_5  = []
+  atrain_Chen_5  = []
+  
+  etest_HL_5  = []
+  etrain_HL_5   = []
+  atest_HL_5   = []
+  atrain_HL_5   = []
+  
+  for i in list(range(nr_repeats)):
+      
+            rkf = StratifiedKFold(n_splits=2, random_state=None, shuffle=True)
+            rkf.get_n_splits(Xtr,ytr)
+
+            for train, test in rkf.split(Xtr,ytr):
+              
+                X = Xtr[train,]
+                y = ytr[train,]
+                Xte = Xtr[test,]
+                tte = ytr[test,]
+                
+                #used in order to keep the same proportion of the classes also in
+                #the bootstrap sample
+                indices_0=[i for i in range(len(y)) if y[i]==0]
+                indices_1=[i for i in range(len(y)) if y[i]==1]
+          
+             
+                bagger = BaggingClassifier(indices_0,indices_1,DecisionTreeClassifier(),
+                                       n_estimators=nr_est,
+                                       max_samples=r, max_features=1.0,n_jobs=-1)
+        
+            
+                bagger = bagger.fit(X, y)
+       
+                getDivValuesCE(bagger,X,y,Xte,tte,etest,etrain,atest,atrain)
+                
+                #for the 0-1 loss the targets are +/- 1
+                y2=[-1 if y[i]==0  else y[i] for i in range(len(y))]
+                tte2=[-1 if tte[i]==0  else tte[i] for i in range(len(tte))]
+                
+                getDivValuesChen(bagger,X,y2,Xte,tte2,etest_Chen,etrain_Chen,atest_Chen,atrain_Chen)
+               
+                getDivValuesHL(bagger,X,y2,Xte,tte2,etest_HL,etrain_HL,atest_HL,atrain_HL)
+                
+                #select random 5 trees:
+                
+                trees=bagger.estimators_
+                
+                indeces_tree=list(range(nr_est))
+                
+                trees_chosen=[]
+                    
+                for k in range(5):
+                    
+                     index_tree=random.choice(indeces_tree)
+    
+                     indeces_tree.remove(index_tree)
+                     
+                     tree=trees[index_tree]
+                     
+                     trees_chosen.append(tree)
+                
+                getDivValuesCE5(trees_chosen,X,y,Xte,tte,etest_5,etrain_5,atest_5,atrain_5)
+                
+                getDivValuesChen5(trees_chosen,X,y2,Xte,tte2,etest_Chen_5,etrain_Chen_5,atest_Chen_5,atrain_Chen_5)
+            
+                getDivValuesHL5(trees_chosen,X,y2,Xte,tte2,etest_HL_5,etrain_HL_5,atest_HL_5,atrain_HL_5)
+                 
+                
+  Etest.append(etest)
+  Etrain.append(etrain)
+  Atest.append(atest)
+  Atrain.append(atrain)
+  
+  Etest_Chen.append(etest_Chen)
+  Etrain_Chen.append(etrain_Chen)
+  Atest_Chen.append(atest_Chen)
+  Atrain_Chen.append(atrain_Chen)
+
+  Etest_HL.append(etest_HL)
+  Etrain_HL.append(etrain_HL)
+  Atest_HL.append(atest_HL)
+  Atrain_HL.append(atrain_HL)
+  
+  #5clf
+  
+  Etest_5.append(etest_5)
+  Etrain_5.append(etrain_5)
+  Atest_5.append(atest_5)
+  Atrain_5.append(atrain_5)
+  
+  Etest_Chen_5.append(etest_Chen_5)
+  Etrain_Chen_5.append(etrain_Chen_5)
+  Atest_Chen_5.append(atest_Chen_5)
+  Atrain_Chen_5.append(atrain_Chen_5)
+
+  Etest_HL_5.append(etest_HL_5)
+  Etrain_HL_5.append(etrain_HL_5)
+  Atest_HL_5.append(atest_HL_5)
+  Atrain_HL_5.append(atrain_HL_5)
+
+
+  
+Etest = np.asarray(Etest)
+Etrain= np.asarray(Etrain)
+Atest = np.asarray(Atest)
+Atrain = np.asarray(Atrain)
+
+Etest_Chen = np.asarray(Etest_Chen)
+Etrain_Chen= np.asarray(Etrain_Chen)
+Atest_Chen = np.asarray(Atest_Chen)
+Atrain_Chen = np.asarray(Atrain_Chen)
+
+
+Etest_HL = np.asarray(Etest_HL)
+Etrain_HL= np.asarray(Etrain_HL)
+Atest_HL = np.asarray(Atest_HL)
+Atrain_HL = np.asarray(Atrain_HL)
+
+#5clf
+
+Etest_5 = np.asarray(Etest_5)
+Etrain_5= np.asarray(Etrain_5)
+Atest_5 = np.asarray(Atest_5)
+Atrain_5 = np.asarray(Atrain_5)
+
+Etest_Chen_5 = np.asarray(Etest_Chen_5)
+Etrain_Chen_5= np.asarray(Etrain_Chen_5)
+Atest_Chen_5 = np.asarray(Atest_Chen_5)
+Atrain_Chen_5 = np.asarray(Atrain_Chen_5)
+
+
+Etest_HL_5 = np.asarray(Etest_HL_5)
+Etrain_HL_5= np.asarray(Etrain_HL_5)
+Atest_HL_5 = np.asarray(Atest_HL_5)
+Atrain_HL_5 = np.asarray(Atrain_HL_5)
+
+
+
+colors=['g']#,'b']#,'m','c']#,'r']
+markers=['o']#,'X']#,'v','<']#,'*']
+
+err_tst=[Etest.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+
+clf=100
+div_type='amb_CE'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+#Chen
+
+err_tst=[Etest_Chen.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain_Chen.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain_Chen.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest_Chen.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+
+div_type='amb_Chen'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+#HL 
+
+err_tst=[Etest_HL.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain_HL.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain_HL.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest_HL.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+div_type='amb_HL'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+
+#5clf
+
+err_tst=[Etest_5.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain_5.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain_5.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest_5.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+clf=5
+div_type='amb_CE'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+#Chen
+
+err_tst=[Etest_Chen_5.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain_Chen_5.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain_Chen_5.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest_Chen_5.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+div_type='amb_Chen'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+#HL 
+
+err_tst=[Etest_HL_5.mean(axis=1)]#,Etest_split.mean(axis=1)]#,Etest_split_q.mean(axis=1)]#,Etest_split_opt.mean(axis=1)]#,Etest_split_six.mean(axis=1)]
+err_tr=[Etrain_HL_5.mean(axis=1)]#,Etrain_split.mean(axis=1)]#,Etrain_split_q.mean(axis=1)]#,Etrain_split_opt.mean(axis=1)]#,Etrain_split_six.mean(axis=1)]
+
+amb_tr=[Atrain_HL_5.mean(axis=1)]#,Atrain_split.mean(axis=1)]#,Atrain_split_q.mean(axis=1)]#,Atrain_split_opt.mean(axis=1)]#,Atrain_split_six.mean(axis=1)]
+amb_tst=[Atest_HL_5.mean(axis=1)]#,Atest_split.mean(axis=1)]#,Atest_split_q.mean(axis=1)]#,Atest_split_opt.mean(axis=1)]#,Atest_split_six.mean(axis=1)]
+
+div_type='amb_HL'
+
+plotTrainDivTstErr(directory,markers,err_tst,amb_tr,colors,div_type, rates,clf,db+'_test_'+str(clf))
+
+
