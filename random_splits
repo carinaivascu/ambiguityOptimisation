@@ -148,6 +148,7 @@ Atrain_HL_5 = []
 rates =np.linspace(0.01, 1.0,30)
 nr_repeats=50
 nr_est=100
+BS=False
 
 fname = 'sonar.txt'
 db=fname[:-4]
@@ -228,7 +229,7 @@ for r in rates:
           
              
                 bagger = BaggingClassifier(indices_0,indices_1,DecisionTreeClassifier(),
-                                       n_estimators=nr_est,
+                                       n_estimators=nr_est, bootstrap=BS,
                                        max_samples=r, max_features=1.0,n_jobs=-1)
         
             
